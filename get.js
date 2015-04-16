@@ -116,26 +116,32 @@ casper.then(function() {
             return team_profiles;
           });
           profiles[team.id] = [];
-          for (var i = 0;i<team_profiles.length;i++) {
-            var name = team_profiles[i]['name'];
-            var type = team_profiles[i]['type'];
-            var status = team_profiles[i]['status'];
+          this.eachThen(team_profiles, function(response) {
+            var team_profile = response.data;
+            var name = team_profile['name'];
+            var type = team_profile['type'];
+            var status = team_profile['status'];
             if (type == 'iOS Distribution' || type == 'iOS UniversalDistribution') {
-              profiles[team.id][i] = {};
-              profiles[team.id][i]['name'] = name;
-              profiles[team.id][i]['type'] = type;
-              profiles[team.id][i]['status'] = status;
+              this.evaluate(function(){
+                $('#grid-table tr td[tabindex=1]').remove();
+              });
               this.click('#grid-table td[title="' + name + '"]');
+              this.capture(team.id + '_' + name + '_opened_profiles.png');
               var expires = this.evaluate(function() {
                 return document.querySelector('#grid-table dd.dateExpire').innerHTML;
               });
               var expiration_date = new Date(expires);
               var diff = expiration_date - Date.now();
               var daysDiff = Math.ceil(diff / (1000 * 3600 * 24));
-              profiles[team.id][i]['expires'] = expiration_date.toDateString();
-              profiles[team.id][i]['expires_in'] = daysDiff;
+              profiles[team.id].push({
+                'name': name,
+                'type': type,
+                'status': status,
+                'expires': expiration_date.toDateString(),
+                'expires_in': daysDiff
+              });
             }
-          }
+          });
         }, function() {
           this.capture(team.id + '_timeout.png');
           this.echo('FATAL: Timeout for ' + team.id);
@@ -170,6 +176,15 @@ casper.then(function() {
                     'expires': expiration_date.toDateString(),
                     'expires_in': daysDiff
                   });
+                } else {
+                  expires_match = /^(Your Program purchase is pending and may take up to 24 hours to process.).+$/.exec(program_expires[i].innerHTML);
+                  if (expires_match != null) {
+                    team_programs.push({
+                      'name': program_names[i].innerHTML,
+                      'expires': expires_match[1],
+                      'expires_in': expires_match[1]
+                    });
+                  }
                 }
               }
               return team_programs;
