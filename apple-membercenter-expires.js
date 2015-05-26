@@ -1,4 +1,5 @@
 var utils = require('utils');
+// utils.dump() for debug
 var fs = require('fs');
 
 var select_team_page = 'https://developer.apple.com/membercenter/selectTeam.action';
@@ -6,12 +7,17 @@ var distrib_certs_page = 'https://developer.apple.com/account/ios/certificate/ce
 var distrib_profiles_page = 'https://developer.apple.com/account/ios/profile/profileList.action?type=production';
 var prog_summary_page = 'https://developer.apple.com/membercenter/index.action#progSummary';
 
+var teams;
+var certs = {};
+var profiles = {};
+
 var casper = require('casper').create({
   pageSettings: {
-    // loadImages:  false,
-    // loadPlugins: false
+    loadImages:  false,
+    loadPlugins: false
   },
   // logLevel: "debug",
+  // logLevel: "info",
   // verbose: true
 });
 
@@ -28,23 +34,24 @@ casper.start();
 
 configFile = fs.read('./config.json');
 casper.then(function() {
-    config = JSON.parse(configFile);
+  this.log('Parsing config JSON file..', 'info');
+  config = JSON.parse(configFile);
 });
 
 casper.thenOpen(select_team_page, function(response) {
+  this.log('Signing to the Member Center..', 'info');
   this.fillSelectors('form#command', {
     'input[name="appleId"]':          config.appleid,
     'input[name="accountPassword"]':  config.password
   }, true);
 });
 
-var teams;
-
 casper.then(function() {
+  this.log('Getting the list of teams..', 'info');
   teams = this.evaluate(function() {
     var teams = [];
     var team_nodes = document.querySelectorAll('#teams option');
-    for (var i = 0; i < team_nodes.length; i++) {
+    for (var i = 0, teams_count = team_nodes.length; i < teams_count; i++) {
       teams.push({
         'id': team_nodes[i].value,
         'name': team_nodes[i].innerHTML
@@ -54,48 +61,59 @@ casper.then(function() {
   });
 });
 
-var certs = {};
-
 casper.then(function() {
   this.each(teams, function(self, team) {
-    this.thenOpen(select_team_page, function(response) {
-      this.fillSelectors('form#saveTeamSelection', {
-        'select[name="memberDisplayId"]':  team.id,
-      }, true);
+    self.thenOpen(select_team_page, function(response) {
+      this.log('Select ' + team.id + '..', 'info');
+      this.waitForSelector('form#saveTeamSelection', function() {
+        this.fillSelectors('form#saveTeamSelection', {
+          'select[name="memberDisplayId"]':  team.id,
+        }, true)
+      }, function() {
+        this.capture(team.id + '_select_timeout.png');
+        this.echo('FATAL: Timeout for ' + team.id);
+      });
+      this.log('Open certs page..', 'info');
       this.thenOpen(distrib_certs_page, function(response) {
-        var certs_data = this.evaluate(function() {
-          var certs_data = [];
-          var cert_name_nodes = document.querySelectorAll('#grid-table td[aria-describedby="grid-table_name"]');
-          var cert_type_nodes = document.querySelectorAll('#grid-table td[aria-describedby="grid-table_typeString"]');
-          var cert_expires_nodes = document.querySelectorAll('#grid-table td[aria-describedby="grid-table_expirationDateString"]');
-          var name, type, expires;
-          for (var i = 0; i < cert_name_nodes.length; i++) {
-            name = cert_name_nodes[i].innerHTML;
-            type = cert_type_nodes[i].innerHTML;
-            var expiration_date = new Date(cert_expires_nodes[i].innerHTML);
-            expires = expiration_date.toDateString();
-            var diff = expiration_date - Date.now();
-            var daysDiff = Math.ceil(diff / (1000 * 3600 * 24));
-            certs_data.push({
-              'name': name,
-              'type': type,
-              'expires': expires,
-              'expires_in': daysDiff
-            });
-          }
-          return certs_data;
+        this.waitForSelector('#grid-table', function() {
+          this.log('Getting certs..', 'info');
+          var certs_data = this.evaluate(function() {
+            var certs_data = [];
+            var cert_name_nodes = document.querySelectorAll('#grid-table td[aria-describedby="grid-table_name"]');
+            var cert_type_nodes = document.querySelectorAll('#grid-table td[aria-describedby="grid-table_typeString"]');
+            var cert_expires_nodes = document.querySelectorAll('#grid-table td[aria-describedby="grid-table_expirationDateString"]');
+            var name, type, expires;
+            for (var i = 0, certs_count = cert_name_nodes.length; i < certs_count; i++) {
+              name = cert_name_nodes[i].innerHTML;
+              type = cert_type_nodes[i].innerHTML;
+              var expiration_date = new Date(cert_expires_nodes[i].innerHTML);
+              expires = expiration_date.toDateString();
+              var diff = expiration_date - Date.now();
+              var daysDiff = Math.ceil(diff / (1000 * 3600 * 24));
+              certs_data.push({
+                'name': name,
+                'type': type,
+                'expires': expires,
+                'expires_in': daysDiff
+              });
+            }
+            return certs_data;
+          });
+          certs[team.id] = certs_data;
+        }, function() {
+          this.capture(team.id + '_certs_timeout.png');
+          this.echo('ERROR: Timeout for ' + team.id);
         });
-        certs[team.id] = certs_data;
       });
     });
   });
 });
 
-var profiles = {};
-
 casper.then(function() {
+  this.log('Getting provisioning profiles..', 'info');
   this.each(teams, function(self, team) {
-    this.thenOpen(select_team_page, function() {
+    self.thenOpen(select_team_page, function() {
+      this.log('Select ' + team.id + '..', 'info');
       this.fillSelectors('form#saveTeamSelection', {
         'select[name="memberDisplayId"]':  team.id,
       }, true);
@@ -106,7 +124,7 @@ casper.then(function() {
             var result_names =  document.querySelectorAll('#grid-table td[aria-describedby="grid-table_name"]');
             var result_types =  document.querySelectorAll('#grid-table td[aria-describedby="grid-table_type"]');
             var result_statuses =  document.querySelectorAll('#grid-table td[aria-describedby="grid-table_status"]');
-            for (var i=0;i<result_names.length;i++) {
+            for (var i=0, profiles_count = result_names.length; i<profiles_count; i++) {
               team_profiles.push({
                 'name': result_names[i].getAttribute('title'),
                 'type': result_types[i].getAttribute('title'),
@@ -126,7 +144,7 @@ casper.then(function() {
                 $('#grid-table tr td[tabindex=1]').remove();
               });
               this.click('#grid-table td[title="' + name + '"]');
-              this.capture(team.id + '_' + name + '_opened_profiles.png');
+              // this.capture(team.id + '_' + name + '_opened_profiles.png');
               var expires = this.evaluate(function() {
                 return document.querySelector('#grid-table dd.dateExpire').innerHTML;
               });
@@ -222,4 +240,7 @@ casper.then(function() {
   }
 });
 
+// utils.dump(casper.steps.map(function(step) {
+//       return step.toString();
+// }));
 casper.run();
