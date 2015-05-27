@@ -68,7 +68,7 @@ casper.then(function getTeamsList() {
   });
 });
 
-// Getting certs stats
+// // Getting certs stats
 casper.then(function getCerts() {
   this.each(teams, function(self, team) {
     self.thenOpen(select_team_page, function openSelectTeamPage(response) {
@@ -81,30 +81,37 @@ casper.then(function getCerts() {
         fs.write('./apple-membercenter-expires.js.log', 'ERROR: Could not open select team page for team: ' + team.id + '\n', 'a');
       });
       this.thenOpen(distrib_certs_page, function openCertsPage(response) {
-        this.waitForSelector('#grid-table', function() {
-          var certs_data = this.evaluate(function() {
-            var certs_data = [];
-            var cert_name_nodes = document.querySelectorAll('#grid-table td[aria-describedby="grid-table_name"]');
-            var cert_type_nodes = document.querySelectorAll('#grid-table td[aria-describedby="grid-table_typeString"]');
-            var cert_expires_nodes = document.querySelectorAll('#grid-table td[aria-describedby="grid-table_expirationDateString"]');
-            var name, type, expires;
-            for (var i = 0, certs_count = cert_name_nodes.length; i < certs_count; i++) {
-              name = cert_name_nodes[i].innerHTML;
-              type = cert_type_nodes[i].innerHTML;
-              var expiration_date = new Date(cert_expires_nodes[i].innerHTML);
-              expires = expiration_date.toDateString();
-              var diff = expiration_date - Date.now();
-              var daysDiff = Math.ceil(diff / (1000 * 3600 * 24));
-              certs_data.push({
-                'name': name,
-                'type': type,
-                'expires': expires,
-                'expires_in': daysDiff
-              });
-            }
-            return certs_data;
+        this.waitForSelector('div.ios', function() {
+          var itemsFound = this.thenEvaluate(function() {
+            return document.querySelector(".no-items-content") ? true : false;
           });
-          certs[team.id] = certs_data;
+          this.then(function() {
+            if (itemsFound) {
+              var certs_data = this.evaluate(function() {
+                var certs_data = [];
+                var cert_name_nodes = document.querySelectorAll('#grid-table td[aria-describedby="grid-table_name"]');
+                var cert_type_nodes = document.querySelectorAll('#grid-table td[aria-describedby="grid-table_typeString"]');
+                var cert_expires_nodes = document.querySelectorAll('#grid-table td[aria-describedby="grid-table_expirationDateString"]');
+                var name, type, expires;
+                for (var i = 0, certs_count = cert_name_nodes.length; i < certs_count; i++) {
+                  name = cert_name_nodes[i].innerHTML;
+                  type = cert_type_nodes[i].innerHTML;
+                  var expiration_date = new Date(cert_expires_nodes[i].innerHTML);
+                  expires = expiration_date.toDateString();
+                  var diff = expiration_date - Date.now();
+                  var daysDiff = Math.ceil(diff / (1000 * 3600 * 24));
+                  certs_data.push({
+                    'name': name,
+                    'type': type,
+                    'expires': expires,
+                    'expires_in': daysDiff
+                  });
+                }
+                return certs_data;
+              });
+              certs[team.id] = certs_data;
+            }
+          });
         }, function() {
           // this.capture(team.id + '_certs_timeout.png');
           fs.write('./apple-membercenter-expires.js.log', 'ERROR: Could not open certs page for team ' + team.id + '\n', 'a');
@@ -123,45 +130,52 @@ casper.then(function getProfiles() {
         'select[name="memberDisplayId"]':  team.id,
       }, true);
       this.thenOpen(distrib_profiles_page, function openProfilesPage() {
-        this.waitForSelector('#grid-table', function() {
-          var team_profiles = this.evaluate(function() {
-            var team_profiles = [];
-            var result_names =  document.querySelectorAll('#grid-table td[aria-describedby="grid-table_name"]');
-            var result_types =  document.querySelectorAll('#grid-table td[aria-describedby="grid-table_type"]');
-            var result_statuses =  document.querySelectorAll('#grid-table td[aria-describedby="grid-table_status"]');
-            for (var i=0, profiles_count = result_names.length; i<profiles_count; i++) {
-              team_profiles.push({
-                'name': result_names[i].getAttribute('title'),
-                'type': result_types[i].getAttribute('title'),
-                'status': result_statuses[i].getAttribute('title')
-              });
-            }
-            return team_profiles;
+        this.waitForSelector('div.ios', function() {
+          var itemsFound = this.thenEvaluate(function() {
+            return document.querySelector(".no-items-content") ? true : false;
           });
-          profiles[team.id] = [];
-          this.eachThen(team_profiles, function getProfileInfo(response) {
-            var team_profile = response.data;
-            var name = team_profile['name'];
-            var type = team_profile['type'];
-            var status = team_profile['status'];
-            if (type == 'iOS Distribution' || type == 'iOS UniversalDistribution') {
-              this.evaluate(function(){
-                $('#grid-table tr td[tabindex=1]').remove();
+          this.then(function() {
+            if (itemsFound) {
+              var team_profiles = this.evaluate(function() {
+                var team_profiles = [];
+                var result_names =  document.querySelectorAll('#grid-table td[aria-describedby="grid-table_name"]');
+                var result_types =  document.querySelectorAll('#grid-table td[aria-describedby="grid-table_type"]');
+                var result_statuses =  document.querySelectorAll('#grid-table td[aria-describedby="grid-table_status"]');
+                for (var i=0, profiles_count = result_names.length; i<profiles_count; i++) {
+                  team_profiles.push({
+                    'name': result_names[i].getAttribute('title'),
+                    'type': result_types[i].getAttribute('title'),
+                    'status': result_statuses[i].getAttribute('title')
+                  });
+                }
+                return team_profiles;
               });
-              this.click('#grid-table td[title="' + name + '"]');
-              // this.capture(team.id + '_' + name + '_opened_profiles.png');
-              var expires = this.evaluate(function() {
-                return document.querySelector('#grid-table dd.dateExpire').innerHTML;
-              });
-              var expiration_date = new Date(expires);
-              var diff = expiration_date - Date.now();
-              var daysDiff = Math.ceil(diff / (1000 * 3600 * 24));
-              profiles[team.id].push({
-                'name': name,
-                'type': type,
-                'status': status,
-                'expires': expiration_date.toDateString(),
-                'expires_in': daysDiff
+              profiles[team.id] = [];
+              this.eachThen(team_profiles, function getProfileInfo(response) {
+                var team_profile = response.data;
+                var name = team_profile['name'];
+                var type = team_profile['type'];
+                var status = team_profile['status'];
+                if (type == 'iOS Distribution' || type == 'iOS UniversalDistribution') {
+                  this.evaluate(function(){
+                    $('#grid-table tr td[tabindex=1]').remove();
+                  });
+                  this.click('#grid-table td[title="' + name + '"]');
+                  // this.capture(team.id + '_' + name + '_opened_profiles.png');
+                  var expires = this.evaluate(function() {
+                    return document.querySelector('#grid-table dd.dateExpire').innerHTML;
+                  });
+                  var expiration_date = new Date(expires);
+                  var diff = expiration_date - Date.now();
+                  var daysDiff = Math.ceil(diff / (1000 * 3600 * 24));
+                  profiles[team.id].push({
+                    'name': name,
+                    'type': type,
+                    'status': status,
+                    'expires': expiration_date.toDateString(),
+                    'expires_in': daysDiff
+                  });
+                }
               });
             }
           });
@@ -175,7 +189,7 @@ casper.then(function getProfiles() {
 });
 
 
-// Getting programs
+// // Getting programs
 casper.then(function getPrograms() {
   this.each(teams, function(self, team) {
     this.thenOpen(select_team_page, function selectTeam(response) {
