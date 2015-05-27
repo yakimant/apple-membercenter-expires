@@ -38,7 +38,7 @@ var currentDate = new Date();
 var day = currentDate.getDate();
 var month = currentDate.getMonth() + 1;
 var year = currentDate.getFullYear();
-fs.write('./apple-membercenter-expires.js.log', 'Execution date :' + day + "/" + month + "/" + year + '\n', 'a');
+fs.write('./apple-membercenter-expires.js.log', 'Execution date: ' + day + "/" + month + "/" + year + '\n', 'a');
 
 configFile = fs.read('./config.json');
 casper.then(function parseConfig() {
@@ -219,6 +219,8 @@ casper.then(function getPrograms() {
             // this.capture(team.id + '_error.png');
           });
         });
+      }, function() {
+        fs.write('./apple-membercenter-expires.js.log', 'ERROR: Could not open team page for team ' + team.id + '\n', 'a');
       });
     });
   });
