@@ -1,5 +1,7 @@
 {
   "appleid": "chubaka",
   "password": "ulybaka",
-  "deadline": 30
+  "deadline": 30,
+  "waitTimeout": 5000,
+  "timeout": 100000
 }
