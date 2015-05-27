@@ -1,4 +1,5 @@
 {
-  "appleid" : "chubaka",
-  "password"  : "ulybaka"
+  "appleid": "chubaka",
+  "password": "ulybaka",
+  "deadline": 30
 }

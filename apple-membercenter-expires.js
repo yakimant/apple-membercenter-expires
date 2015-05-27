@@ -10,6 +10,7 @@ var prog_summary_page = 'https://developer.apple.com/membercenter/index.action#p
 var teams;
 var certs = {};
 var profiles = {};
+var programs = {};
 
 var casper = require('casper').create({
   pageSettings: {
@@ -32,22 +33,28 @@ casper.on('remote.message', function(msg) {
 
 casper.start();
 
+// Log execution time
+var currentDate = new Date();
+var day = currentDate.getDate();
+var month = currentDate.getMonth() + 1;
+var year = currentDate.getFullYear();
+fs.write('./apple-membercenter-expires.js.log', 'Execution date :' + day + "/" + month + "/" + year + '\n', 'a');
+
 configFile = fs.read('./config.json');
-casper.then(function() {
-  this.log('Parsing config JSON file..', 'info');
+casper.then(function parseConfig() {
   config = JSON.parse(configFile);
+  this.options.waitTimeout = config.waitTimeout;
+  this.options.timeout = config.timeout;
 });
 
-casper.thenOpen(select_team_page, function(response) {
-  this.log('Signing to the Member Center..', 'info');
+casper.thenOpen(select_team_page, function openSelectTeamPage(response) {
   this.fillSelectors('form#command', {
     'input[name="appleId"]':          config.appleid,
     'input[name="accountPassword"]':  config.password
   }, true);
 });
 
-casper.then(function() {
-  this.log('Getting the list of teams..', 'info');
+casper.then(function getTeamsList() {
   teams = this.evaluate(function() {
     var teams = [];
     var team_nodes = document.querySelectorAll('#teams option');
@@ -61,22 +68,20 @@ casper.then(function() {
   });
 });
 
-casper.then(function() {
+// Getting certs stats
+casper.then(function getCerts() {
   this.each(teams, function(self, team) {
-    self.thenOpen(select_team_page, function(response) {
-      this.log('Select ' + team.id + '..', 'info');
-      this.waitForSelector('form#saveTeamSelection', function() {
+    self.thenOpen(select_team_page, function openSelectTeamPage(response) {
+      this.waitForSelector('form#saveTeamSelection', function selectTeam() {
         this.fillSelectors('form#saveTeamSelection', {
           'select[name="memberDisplayId"]':  team.id,
         }, true)
       }, function() {
-        this.capture(team.id + '_select_timeout.png');
-        this.echo('FATAL: Timeout for ' + team.id);
+        // this.capture(team.id + '_select_timeout.png');
+        fs.write('./apple-membercenter-expires.js.log', 'ERROR: Could not open select team page for team: ' + team.id + '\n', 'a');
       });
-      this.log('Open certs page..', 'info');
-      this.thenOpen(distrib_certs_page, function(response) {
+      this.thenOpen(distrib_certs_page, function openCertsPage(response) {
         this.waitForSelector('#grid-table', function() {
-          this.log('Getting certs..', 'info');
           var certs_data = this.evaluate(function() {
             var certs_data = [];
             var cert_name_nodes = document.querySelectorAll('#grid-table td[aria-describedby="grid-table_name"]');
@@ -101,23 +106,23 @@ casper.then(function() {
           });
           certs[team.id] = certs_data;
         }, function() {
-          this.capture(team.id + '_certs_timeout.png');
-          this.echo('ERROR: Timeout for ' + team.id);
+          // this.capture(team.id + '_certs_timeout.png');
+          fs.write('./apple-membercenter-expires.js.log', 'ERROR: Could not open certs page for team ' + team.id + '\n', 'a');
         });
       });
     });
   });
 });
 
-casper.then(function() {
-  this.log('Getting provisioning profiles..', 'info');
+// Getting provisioning profiles
+casper.then(function getProfiles() {
   this.each(teams, function(self, team) {
-    self.thenOpen(select_team_page, function() {
+    self.thenOpen(select_team_page, function selectTeam() {
       this.log('Select ' + team.id + '..', 'info');
       this.fillSelectors('form#saveTeamSelection', {
         'select[name="memberDisplayId"]':  team.id,
       }, true);
-      this.thenOpen(distrib_profiles_page, function() {
+      this.thenOpen(distrib_profiles_page, function openProfilesPage() {
         this.waitForSelector('#grid-table', function() {
           var team_profiles = this.evaluate(function() {
             var team_profiles = [];
@@ -134,7 +139,7 @@ casper.then(function() {
             return team_profiles;
           });
           profiles[team.id] = [];
-          this.eachThen(team_profiles, function(response) {
+          this.eachThen(team_profiles, function getProfileInfo(response) {
             var team_profile = response.data;
             var name = team_profile['name'];
             var type = team_profile['type'];
@@ -161,23 +166,24 @@ casper.then(function() {
             }
           });
         }, function() {
-          this.capture(team.id + '_timeout.png');
-          this.echo('FATAL: Timeout for ' + team.id);
+          // this.capture(team.id + '_timeout.png');
+          fs.write('./apple-membercenter-expires.js.log', 'ERROR: Could not open provision profiles page for team ' + team.id + '\n', 'a');
         });
       });
     });
   });
 });
 
-var programs = {};
-casper.then(function() {
+
+// Getting programs
+casper.then(function getPrograms() {
   this.each(teams, function(self, team) {
-    this.thenOpen(select_team_page, function(response) {
+    this.thenOpen(select_team_page, function selectTeam(response) {
       this.waitForSelector('form#saveTeamSelection', function() {
         this.fillSelectors('form#saveTeamSelection', {
           'select[name="memberDisplayId"]':  team.id,
         }, true);
-        this.thenOpen(prog_summary_page, function() {
+        this.thenOpen(prog_summary_page, function openProgramsPage() {
           this.waitForSelector('.programs', function() {
             var team_programs = this.evaluate(function() {
               var program_names = document.querySelectorAll('.programs h4');
@@ -208,37 +214,67 @@ casper.then(function() {
               return team_programs;
             });
             programs[team.id] = team_programs;
+          }, function() {
+            fs.write('./apple-membercenter-expires.js.log', 'ERROR: Could not open programs page for team ' + team.id + '\n', 'a');
+            // this.capture(team.id + '_error.png');
           });
         });
-      }, function() {
-        this.capture(team.id + '_error.png');
-      }, 10000);
+      });
     });
   });
 });
 
-casper.then(function() {
-  for (i in teams) {
-    var team = teams[i];
-    this.echo('=== Team ' + team.name + ' ===');
-    this.echo('\t--- Programs ---');
-    for (j in programs[team.id]) {
-      var program = programs[team.id][j];
-      this.echo('\t\t' + program['name'] + ' expires in ' + program['expires_in'] + ' day(s)');
+casper.then(function printExpiringSoon() {
+  // utils.dump(teams);
+  // utils.dump(programs);
+  // utils.dump(certs);
+  // utils.dump(profiles);
+  var team, program, cert, profile;
+  for (var i=0, teams_count=teams.length; i<teams_count; i++) {
+    team = teams[i];
+    for (var j=0, programs_count = programs[team.id] ? programs[team.id].length : 0; j < programs_count; j++) {
+      program = programs[team.id][j];
+      if (program['expires_in'] <= config.deadline) {
+        console.log("Program " + program['name'] + " for \"" + team.name + "\" team will expire in " + program['expires_in'] + " day(s) " + " (" + program['expires'] + ")");
+      }
     }
-    this.echo('\t--- Certificates ---');
-    for (j in certs[team.id]) {
-      var cert = certs[team.id][j];
-      this.echo('\t\t' + cert['name'] + ' (' + cert['type'] + ') expires in ' + cert['expires_in'] + ' day(s))');
+    for (var k=0, certs_count = certs[team.id] ? certs[team.id].length : 0; k < certs_count; k++) {
+      cert = certs[team.id][k];
+      if (cert['expires_in'] <= config.deadline) {
+        console.log("Cert \"" + cert['type'] + ": " + cert['name'] + "\" for \"" + team.name + "\" team will expire in " + cert['expires_in'] + " day(s) " + " (" + cert['expires'] + ")");
+      }
     }
-    this.echo('\t--- Provisioning Profiles ---');
-    for (j in profiles[team.id]) {
-      var profile = profiles[team.id][j];
-      this.echo('\t\t' + profile['name'] + ' expires in ' + profile['expires_in'] + ' day(s)');
+    for (var l=0, profiles_count = profiles[team.id] ? profiles[team.id].length : 0; l < profiles_count; l++) {
+      profile = profiles[team.id][l];
+      if (profile['expires_in'] <= config.deadline) {
+        console.log("Profile \"" + profile['type'] + ": " + profile['name'] + "\" for " + team.name + " team will expire in " + profile['expires_in'] + " day(s) " + " (" + profile['expires'] + ") Status: " + profile['status']);
+      }
     }
-    this.echo('');
   }
 });
+
+// casper.then(function() {
+//   for (i in teams) {
+//     var team = teams[i];
+//     this.echo('=== Team ' + team.name + ' ===');
+//     this.echo('\t--- Programs ---');
+//     for (j in programs[team.id]) {
+//       var program = programs[team.id][j];
+//       this.echo('\t\t' + program['name'] + ' expires in ' + program['expires_in'] + ' day(s)');
+//     }
+//     this.echo('\t--- Certificates ---');
+//     for (j in certs[team.id]) {
+//       var cert = certs[team.id][j];
+//       this.echo('\t\t' + cert['name'] + ' (' + cert['type'] + ') expires in ' + cert['expires_in'] + ' day(s))');
+//     }
+//     this.echo('\t--- Provisioning Profiles ---');
+//     for (j in profiles[team.id]) {
+//       var profile = profiles[team.id][j];
+//       this.echo('\t\t' + profile['name'] + ' expires in ' + profile['expires_in'] + ' day(s)');
+//     }
+//     this.echo('');
+//   }
+// });
 
 // utils.dump(casper.steps.map(function(step) {
 //       return step.toString();
