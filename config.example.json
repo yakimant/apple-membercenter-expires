@@ -3,5 +3,7 @@
   "password": "ulybaka",
   "deadline": 30,
   "waitTimeout": 5000,
-  "timeout": 100000
+  "timeout": 100000,
+  "logfile": "/logfile",
+  "statfile": "/statfile"
 }

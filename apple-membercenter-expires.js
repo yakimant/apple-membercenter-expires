@@ -40,13 +40,13 @@ var currentDate = new Date();
 var day = currentDate.getDate();
 var month = currentDate.getMonth() + 1;
 var year = currentDate.getFullYear();
-fs.write('./apple-membercenter-expires.js.log', 'Execution date: ' + day + "/" + month + "/" + year + '\n', 'a');
 
 configFile = fs.read('./config.json');
 casper.then(function parseConfig() {
   config = JSON.parse(configFile);
   this.options.waitTimeout = config.waitTimeout;
   this.options.timeout = config.timeout;
+  fs.write(config.logfile, 'Execution date: ' + day + "/" + month + "/" + year + '\n', 'a');
 });
 
 casper.thenOpen(select_team_page, function openSelectTeamPage(response) {
@@ -80,7 +80,7 @@ casper.then(function getCerts() {
         }, true)
       }, function() {
         // this.capture(team.id + '_select_timeout.png');
-        fs.write('./apple-membercenter-expires.js.log', 'ERROR: Could not open select team page for team: ' + team.id + '\n', 'a');
+        fs.write(config.logfile, 'ERROR: Could not open select team page for team: ' + team.id + '\n', 'a');
       });
       this.thenOpen(distrib_certs_page, function openCertsPage(response) {
         this.waitForSelector('div.ios', function() {
@@ -116,7 +116,7 @@ casper.then(function getCerts() {
           });
         }, function() {
           // this.capture(team.id + '_certs_timeout.png');
-          fs.write('./apple-membercenter-expires.js.log', 'ERROR: Could not open certs page for team ' + team.id + '\n', 'a');
+          fs.write(config.logfile, 'ERROR: Could not open certs page for team ' + team.id + '\n', 'a');
         });
       });
     });
@@ -183,7 +183,7 @@ casper.then(function getProfiles() {
           });
         }, function() {
           // this.capture(team.id + '_timeout.png');
-          fs.write('./apple-membercenter-expires.js.log', 'ERROR: Could not open provision profiles page for team ' + team.id + '\n', 'a');
+          fs.write(config.logfile, 'ERROR: Could not open provision profiles page for team ' + team.id + '\n', 'a');
         });
       });
     });
@@ -231,18 +231,19 @@ casper.then(function getPrograms() {
             });
             programs[team.id] = team_programs;
           }, function() {
-            fs.write('./apple-membercenter-expires.js.log', 'ERROR: Could not open programs page for team ' + team.id + '\n', 'a');
+            fs.write(config.logfile, 'ERROR: Could not open programs page for team ' + team.id + '\n', 'a');
             // this.capture(team.id + '_error.png');
           });
         });
       }, function() {
-        fs.write('./apple-membercenter-expires.js.log', 'ERROR: Could not open team page for team ' + team.id + '\n', 'a');
+        fs.write(config.logfile, 'ERROR: Could not open team page for team ' + team.id + '\n', 'a');
       });
     });
   });
 });
 
 casper.then(function printExpiringSoon() {
+  var statfile = fs.open(config.statfile + '.tmp', 'w');
   // utils.dump(teams);
   // utils.dump(programs);
   // utils.dump(certs);
@@ -253,26 +254,28 @@ casper.then(function printExpiringSoon() {
     for (var j=0, programs_count = programs[team.id] ? programs[team.id].length : 0; j < programs_count; j++) {
       program = programs[team.id][j];
       if (program['expires_in'] <= config.deadline) {
-        console.log("Program " + program['name'] + " for \"" + team.name + "\" team will expire in " + program['expires_in'] + " day(s) " + " (" + program['expires'] + ")");
+        statfile.writeLine("Program " + program['name'] + " for \"" + team.name + "\" team will expire in " + program['expires_in'] + " day(s) " + " (" + program['expires'] + ")");
         hasExpirations = true;
       }
     }
     for (var k=0, certs_count = certs[team.id] ? certs[team.id].length : 0; k < certs_count; k++) {
       cert = certs[team.id][k];
       if (cert['expires_in'] <= config.deadline) {
-        console.log("Cert \"" + cert['type'] + ": " + cert['name'] + "\" for \"" + team.name + "\" team will expire in " + cert['expires_in'] + " day(s) " + " (" + cert['expires'] + ")");
+        statfile.writeLine("Cert \"" + cert['type'] + ": " + cert['name'] + "\" for \"" + team.name + "\" team will expire in " + cert['expires_in'] + " day(s) " + " (" + cert['expires'] + ")");
         hasExpirations = true;
       }
     }
     for (var l=0, profiles_count = profiles[team.id] ? profiles[team.id].length : 0; l < profiles_count; l++) {
       profile = profiles[team.id][l];
       if (profile['expires_in'] <= config.deadline) {
-        console.log("Profile \"" + profile['type'] + ": " + profile['name'] + "\" for " + team.name + " team will expire in " + profile['expires_in'] + " day(s) " + " (" + profile['expires'] + ") Status: " + profile['status']);
+        statfile.writeLine("Profile \"" + profile['type'] + ": " + profile['name'] + "\" for " + team.name + " team will expire in " + profile['expires_in'] + " day(s) " + " (" + profile['expires'] + ") Status: " + profile['status']);
         hasExpirations = true;
       }
     }
   }
-  if (! hasExpirations) { console.log("No expirations in comming " + config.deadline + " day(s)"); }
+  if (! hasExpirations) { statfile.writeLine("No expirations in comming " + config.deadline + " day(s)"); }
+  statfile.close();
+  fs.move(config.statfile + '.tmp', config.statfile);
 });
 
 // casper.then(function() {
