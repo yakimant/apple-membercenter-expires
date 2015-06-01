@@ -12,6 +12,8 @@ var certs = {};
 var profiles = {};
 var programs = {};
 
+var hasExpirations = false;
+
 var casper = require('casper').create({
   pageSettings: {
     loadImages:  false,
@@ -252,21 +254,25 @@ casper.then(function printExpiringSoon() {
       program = programs[team.id][j];
       if (program['expires_in'] <= config.deadline) {
         console.log("Program " + program['name'] + " for \"" + team.name + "\" team will expire in " + program['expires_in'] + " day(s) " + " (" + program['expires'] + ")");
+        hasExpirations = true;
       }
     }
     for (var k=0, certs_count = certs[team.id] ? certs[team.id].length : 0; k < certs_count; k++) {
       cert = certs[team.id][k];
       if (cert['expires_in'] <= config.deadline) {
         console.log("Cert \"" + cert['type'] + ": " + cert['name'] + "\" for \"" + team.name + "\" team will expire in " + cert['expires_in'] + " day(s) " + " (" + cert['expires'] + ")");
+        hasExpirations = true;
       }
     }
     for (var l=0, profiles_count = profiles[team.id] ? profiles[team.id].length : 0; l < profiles_count; l++) {
       profile = profiles[team.id][l];
       if (profile['expires_in'] <= config.deadline) {
         console.log("Profile \"" + profile['type'] + ": " + profile['name'] + "\" for " + team.name + " team will expire in " + profile['expires_in'] + " day(s) " + " (" + profile['expires'] + ") Status: " + profile['status']);
+        hasExpirations = true;
       }
     }
   }
+  if (! hasExpirations) { console.log("No expirations in comming " + config.deadline + " day(s)"); }
 });
 
 // casper.then(function() {
