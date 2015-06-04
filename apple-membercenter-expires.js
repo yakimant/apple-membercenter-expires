@@ -2,6 +2,8 @@ var utils = require('utils');
 // utils.dump() for debug
 var fs = require('fs');
 
+var scriptDir = fs.absolute(require('system').args[3]).replace('apple-membercenter-expires.js', '');
+
 var select_team_page = 'https://developer.apple.com/membercenter/selectTeam.action';
 var distrib_certs_page = 'https://developer.apple.com/account/ios/certificate/certificateList.action?type=distribution';
 var distrib_profiles_page = 'https://developer.apple.com/account/ios/profile/profileList.action?type=production';
@@ -33,19 +35,19 @@ casper.on('remote.message', function(msg) {
 //   console.log('Error code: ' + resourceError.errorCode + '. Description: ' + resourceError.errorString);
 // });
 
+
 casper.start();
 
-// Log execution time
-var currentDate = new Date();
-var day = currentDate.getDate();
-var month = currentDate.getMonth() + 1;
-var year = currentDate.getFullYear();
 
-configFile = fs.read('./config.json');
 casper.then(function parseConfig() {
+  configFile = fs.read(scriptDir + 'config.json');
   config = JSON.parse(configFile);
   this.options.waitTimeout = config.waitTimeout;
   this.options.timeout = config.timeout;
+  var currentDate = new Date();
+  var day = currentDate.getDate();
+  var month = currentDate.getMonth() + 1;
+  var year = currentDate.getFullYear();
   fs.write(config.logfile, 'Execution date: ' + day + "/" + month + "/" + year + '\n', 'a');
 });
 
@@ -275,33 +277,10 @@ casper.then(function printExpiringSoon() {
   }
   if (! hasExpirations) { statfile.writeLine("No expirations in comming " + config.deadline + " day(s)"); }
   statfile.close();
+  if (fs.exists(config.statfile)) {
+    fs.remove(config.statfile);
+  }
   fs.move(config.statfile + '.tmp', config.statfile);
 });
 
-// casper.then(function() {
-//   for (i in teams) {
-//     var team = teams[i];
-//     this.echo('=== Team ' + team.name + ' ===');
-//     this.echo('\t--- Programs ---');
-//     for (j in programs[team.id]) {
-//       var program = programs[team.id][j];
-//       this.echo('\t\t' + program['name'] + ' expires in ' + program['expires_in'] + ' day(s)');
-//     }
-//     this.echo('\t--- Certificates ---');
-//     for (j in certs[team.id]) {
-//       var cert = certs[team.id][j];
-//       this.echo('\t\t' + cert['name'] + ' (' + cert['type'] + ') expires in ' + cert['expires_in'] + ' day(s))');
-//     }
-//     this.echo('\t--- Provisioning Profiles ---');
-//     for (j in profiles[team.id]) {
-//       var profile = profiles[team.id][j];
-//       this.echo('\t\t' + profile['name'] + ' expires in ' + profile['expires_in'] + ' day(s)');
-//     }
-//     this.echo('');
-//   }
-// });
-
-// utils.dump(casper.steps.map(function(step) {
-//       return step.toString();
-// }));
 casper.run();
